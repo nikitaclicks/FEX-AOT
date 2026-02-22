@@ -8,6 +8,8 @@ RUNNER="${REPO_ROOT}/Scripts/dev/run_x86_dev.sh"
 CANARY_SRC="${SCRIPT_DIR}/aot_canary.c"
 CANARY_BIN="${BUILD_DIR}/Bin/aot_canary"
 SEED="${SEED:-3735928559}"
+CANARY_ITERS="${CANARY_ITERS:-200000}"
+CANARY_WORK="${CANARY_WORK:-1}"
 
 usage() {
   cat <<EOF
@@ -21,7 +23,7 @@ Runs a deterministic canary under:
 Then checks output and exit-code parity between (1) and (3).
 
 Environment overrides:
-  BUILD_DIR, SEED, CC
+  BUILD_DIR, SEED, CANARY_ITERS, CANARY_WORK, CC
 EOF
 }
 
@@ -39,6 +41,22 @@ while [[ $# -gt 0 ]]; do
     --keep-cache)
       KEEP_CACHE=1
       shift
+      ;;
+    --canary-iters)
+      CANARY_ITERS="${2:-}"
+      if [[ -z "${CANARY_ITERS}" ]]; then
+        echo "--canary-iters requires a value" >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --canary-work)
+      CANARY_WORK="${2:-}"
+      if [[ -z "${CANARY_WORK}" ]]; then
+        echo "--canary-work requires a value" >&2
+        exit 1
+      fi
+      shift 2
       ;;
     -h|--help)
       usage
@@ -85,7 +103,7 @@ echo "[1/3] JIT baseline"
 set +e
 FEX_APP_CACHE_LOCATION="${CACHE_DIR}" \
 FEX_ENABLECODECACHINGWIP=0 \
-"${RUNNER}" "${CANARY_BIN}" "${SEED}" >"${OUT_JIT}" 2>&1
+"${RUNNER}" "${CANARY_BIN}" "${SEED}" "${CANARY_ITERS}" "${CANARY_WORK}" >"${OUT_JIT}" 2>&1
 RC_JIT=$?
 set -e
 
@@ -93,7 +111,7 @@ echo "[2/3] Cache warm-up"
 set +e
 FEX_APP_CACHE_LOCATION="${CACHE_DIR}" \
 FEX_ENABLECODECACHINGWIP=1 \
-"${RUNNER}" "${CANARY_BIN}" "${SEED}" >"${OUT_CACHE_WARM}" 2>&1
+"${RUNNER}" "${CANARY_BIN}" "${SEED}" "${CANARY_ITERS}" "${CANARY_WORK}" >"${OUT_CACHE_WARM}" 2>&1
 RC_CACHE_WARM=$?
 set -e
 
@@ -101,7 +119,7 @@ echo "[3/3] Cache validation run"
 set +e
 FEX_APP_CACHE_LOCATION="${CACHE_DIR}" \
 FEX_ENABLECODECACHINGWIP=1 \
-"${RUNNER}" "${CANARY_BIN}" "${SEED}" >"${OUT_CACHE_VALIDATE}" 2>&1
+"${RUNNER}" "${CANARY_BIN}" "${SEED}" "${CANARY_ITERS}" "${CANARY_WORK}" >"${OUT_CACHE_VALIDATE}" 2>&1
 RC_CACHE_VALIDATE=$?
 set -e
 
@@ -123,4 +141,4 @@ if [[ ${RC_CACHE_WARM} -ne 0 ]]; then
   exit 1
 fi
 
-echo "PASS: JIT and cache-enabled outputs match (seed=${SEED})"
+echo "PASS: JIT and cache-enabled outputs match (seed=${SEED}, iters=${CANARY_ITERS}, work=${CANARY_WORK})"

@@ -16,6 +16,7 @@ This fork is focused on adding practical AOT-style app caching workflows to impr
 - Dependency-aware static seeding (main binary + transitive shared libraries).
 - Unified cache naming keys across runtime/server/offline compiler.
 - Runtime cache load/fallback diagnostics.
+- Benchmark framework for baseline vs prebuilt-cache performance comparison (Markdown+JSON output).
 - Validation tooling to confirm cache-enabled behavior remains aligned with JIT.
 
 ### Impact
@@ -23,6 +24,56 @@ This fork is focused on adding practical AOT-style app caching workflows to impr
 - Better practical performance characteristics from more reusable prebuilt caches.
 - Lower warm-up overhead in repeated app runs.
 - Clearer observability when cache load paths fall back.
+
+### Sample benchmark result (heavy canary)
+
+Command used:
+
+```sh
+./Scripts/dev/run_aot_perf_benchmark_x86_dev.sh \
+	--app ./Build-x86dev/Bin/aot_canary \
+	--app-name canary-heavy \
+	--app-arg 3735928559 \
+	--app-arg 600000 \
+	--app-arg 2 \
+	--no-canary \
+	--runs 3 \
+	--warmup 0 \
+	--timer python \
+	--report-dir ./Build-x86dev/AOTBenchmarks/canary-heavy-fast
+```
+
+Measured output:
+
+| Workload | Baseline median (s) | Prebuilt median (s) | Delta prebuilt vs baseline |
+|---|---:|---:|---:|
+| app-canary-heavy | 16.337991 | 15.528765 | -4.95% |
+
+Interpretation: this heavier synthetic canary profile is tuned to surface prebuilt-cache effects while still finishing in reasonable time. This measurement used the Python timing fallback backend on an x86-host dev setup.
+
+### Sample benchmark result (real app: uname)
+
+Command used:
+
+```sh
+./Scripts/dev/run_aot_perf_benchmark_x86_dev.sh \
+	--app /usr/bin/uname \
+	--app-name uname \
+	--app-arg -a \
+	--no-canary \
+	--runs 5 \
+	--warmup 1 \
+	--timer python \
+	--report-dir ./Build-x86dev/AOTBenchmarks/uname-sample
+```
+
+Measured output:
+
+| Workload | Baseline median (s) | Prebuilt median (s) | Delta prebuilt vs baseline |
+|---|---:|---:|---:|
+| app-uname | 0.427574 | 0.458252 | +7.17% |
+
+Interpretation: this real-app sample is more representative than the synthetic canary, but still reflects this specific local x86-host dev environment and Python timing backend.
 
 Implementation and day-to-day commands are documented in [Scripts/dev/README.md](Scripts/dev/README.md).
 

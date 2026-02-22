@@ -28,6 +28,8 @@ This fork adds functionality and tooling to prebuild app caches (including depen
   - Validation helper: deterministic parity check between JIT and cache-enabled paths.
 - `run_local_aot_regressions_x86_dev.sh`
   - Validation helper: runs guardrail + static seeding + runtime smoke checks as a local non-CI regression suite.
+- `run_aot_perf_benchmark_x86_dev.sh`
+  - Hyperfine-based benchmark runner comparing baseline (no cache) vs prebuilt AOT/static cache scenarios with Markdown+JSON reports.
 
 ### Expected impact
 
@@ -44,6 +46,19 @@ This fork adds functionality and tooling to prebuild app caches (including depen
   - Runs apps using the prebuilt cache set.
 3. `./Scripts/dev/run_aot_guardrail_x86_dev.sh --seed 12345`
   - Optional validation pass for JIT-vs-cache parity.
+
+For perf comparison benchmarking:
+
+1. `./Scripts/dev/run_aot_perf_benchmark_x86_dev.sh --app /path/to/program`
+
+Useful options:
+
+- `--app-arg VALUE` (repeatable)
+- `--runs 10 --warmup 3`
+- `--canary-iters 2000000 --canary-work 4` (heavier built-in canary workload)
+- `--include-dynamic`
+- `--no-canary`
+- `--report-dir /path/to/output`
 
 ## Scripts
 
@@ -71,6 +86,10 @@ For AOT/cache guardrails during development:
 
 1. `./Scripts/dev/build_x86_dev.sh`
 2. `./Scripts/dev/run_aot_guardrail_x86_dev.sh --seed 12345`
+
+To stress parity on a heavier canary profile:
+
+1. `./Scripts/dev/run_aot_guardrail_x86_dev.sh --seed 12345 --canary-iters 2000000 --canary-work 4`
 
 This guardrail runs the canary in JIT mode and cache-enabled mode and fails if output or exit code differs.
 

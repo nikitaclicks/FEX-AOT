@@ -27,6 +27,7 @@ PACKAGES=(
   erofs-utils
   pkgconf-pkg-config
   ccache
+  hyperfine
   qt6-qtdeclarative-devel
 )
 
