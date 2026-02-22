@@ -1,4 +1,33 @@
 [中文](https://github.com/FEX-Emu/FEX/blob/main/docs/Readme_CN.md)
+
+## Fork Focus: AOT App Caching and Static Cache Prebuilds
+
+This fork is focused on adding practical AOT-style app caching workflows to improve runtime behavior and reduce repeated JIT cost.
+
+### Why it exists
+
+- Prebuild executable + dependency cache artifacts before first run.
+- Shift work from runtime JIT to offline cache generation.
+- Improve startup/stutter behavior by increasing cache reuse.
+
+### What this adds
+
+- Static codemap generation + offline cache compilation workflow.
+- Dependency-aware static seeding (main binary + transitive shared libraries).
+- Unified cache naming keys across runtime/server/offline compiler.
+- Runtime cache load/fallback diagnostics.
+- Validation tooling to confirm cache-enabled behavior remains aligned with JIT.
+
+### Impact
+
+- Better practical performance characteristics from more reusable prebuilt caches.
+- Lower warm-up overhead in repeated app runs.
+- Clearer observability when cache load paths fall back.
+
+Implementation and day-to-day commands are documented in [Scripts/dev/README.md](Scripts/dev/README.md).
+
+Note: x86-host scripts in this fork are a practical development path (used because ARM Linux hardware is not always available). The primary goal is the AOT caching functionality itself.
+
 # FEX: Emulate x86 Programs on ARM64
 FEX allows you to run x86 applications on ARM64 Linux devices, similar to qemu-user and box64.
 It offers broad compatibility with both 32-bit and 64-bit binaries, and it can be used alongside Wine/Proton to play Windows games.
