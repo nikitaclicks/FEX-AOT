@@ -51,29 +51,29 @@ Measured output:
 
 Interpretation: this heavier synthetic canary profile is tuned to surface prebuilt-cache effects while still finishing in reasonable time. This measurement used the Python timing fallback backend on an x86-host dev setup.
 
-### Sample benchmark result (real app: uname)
+### Sample benchmark result (real app: python3)
 
 Command used:
 
 ```sh
 ./Scripts/dev/run_aot_perf_benchmark_x86_dev.sh \
-	--app /usr/bin/uname \
-	--app-name uname \
-	--app-arg -a \
+	--app /usr/bin/python3 \
+	--app-name python3-version \
+	--app-arg -V \
 	--no-canary \
-	--runs 5 \
-	--warmup 1 \
+	--runs 3 \
+	--warmup 0 \
 	--timer python \
-	--report-dir ./Build-x86dev/AOTBenchmarks/uname-sample
+	--report-dir ./Build-x86dev/AOTBenchmarks/python3-version-fast
 ```
 
 Measured output:
 
 | Workload | Baseline median (s) | Prebuilt median (s) | Delta prebuilt vs baseline |
 |---|---:|---:|---:|
-| app-uname | 0.427574 | 0.458252 | +7.17% |
+| app-python3-version | 1.184307 | 1.185738 | +0.12% |
 
-Interpretation: this real-app sample is more representative than the synthetic canary, but still reflects this specific local x86-host dev environment and Python timing backend.
+Interpretation: this uses a larger real binary than `uname`, while keeping runtime short for local iteration. It still reflects this specific x86-host dev environment and Python timing backend.
 
 Implementation and day-to-day commands are documented in [Scripts/dev/README.md](Scripts/dev/README.md).
 
