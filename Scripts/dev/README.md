@@ -35,6 +35,11 @@ For static cache seeding MVP (entrypoint-seeded):
 2. `./Scripts/dev/build_x86_dev.sh --target FEXOfflineCompiler`
 3. `./Scripts/dev/build_static_seed_cache_x86_dev.sh --input-dir /path/to/x86-binaries`
 
+Optional dependency-resolution flags:
+
+- `--rootfs /path/to/rootfs`
+- `--search-path /path/one --search-path /path/two`
+
 The generated cache set can be tested with `FEX_APP_CACHE_LOCATION=<cache-dir>`.
 
 ## Runtime defaults used by `run_x86_dev.sh`
