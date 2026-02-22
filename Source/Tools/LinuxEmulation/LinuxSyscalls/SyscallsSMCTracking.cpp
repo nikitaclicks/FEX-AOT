@@ -13,6 +13,7 @@ $end_info$
 #include "Common/FileMappingBaseAddress.h"
 
 #include <filesystem>
+#include <atomic>
 #include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/personality.h>
@@ -30,6 +31,67 @@ $end_info$
 #include <Linux/Utils/ELFParser.h>
 
 namespace FEX::HLE {
+namespace {
+enum class CacheLoadResult {
+  Loaded,
+  Miss,
+  OpenError,
+  InvalidFile,
+  LoadFailed,
+};
+
+struct CacheLoadStats {
+  std::atomic<uint64_t> Attempts {};
+  std::atomic<uint64_t> Loaded {};
+  std::atomic<uint64_t> Miss {};
+  std::atomic<uint64_t> OpenError {};
+  std::atomic<uint64_t> InvalidFile {};
+  std::atomic<uint64_t> LoadFailed {};
+};
+
+CacheLoadStats GlobalCacheLoadStats;
+
+void RecordCacheLoadResult(CacheLoadResult Result, std::string_view CacheFilename) {
+  const auto Attempt = GlobalCacheLoadStats.Attempts.fetch_add(1, std::memory_order_relaxed) + 1;
+
+  const char* Reason = "loaded";
+  switch (Result) {
+  case CacheLoadResult::Loaded:
+    GlobalCacheLoadStats.Loaded.fetch_add(1, std::memory_order_relaxed);
+    break;
+  case CacheLoadResult::Miss:
+    GlobalCacheLoadStats.Miss.fetch_add(1, std::memory_order_relaxed);
+    Reason = "missing";
+    break;
+  case CacheLoadResult::OpenError:
+    GlobalCacheLoadStats.OpenError.fetch_add(1, std::memory_order_relaxed);
+    Reason = "open_error";
+    break;
+  case CacheLoadResult::InvalidFile:
+    GlobalCacheLoadStats.InvalidFile.fetch_add(1, std::memory_order_relaxed);
+    Reason = "invalid_file";
+    break;
+  case CacheLoadResult::LoadFailed:
+    GlobalCacheLoadStats.LoadFailed.fetch_add(1, std::memory_order_relaxed);
+    Reason = "validation_or_load_failed";
+    break;
+  }
+
+  if (Result != CacheLoadResult::Loaded) {
+    LogMan::Msg::DFmt("Code cache fallback: reason={} file={}", Reason, CacheFilename);
+  }
+
+  if ((Attempt & 0x3F) == 0) {
+    LogMan::Msg::IFmt("Code cache stats: attempts={} loaded={} miss={} open_error={} invalid_file={} load_failed={}", Attempt,
+                      GlobalCacheLoadStats.Loaded.load(std::memory_order_relaxed),
+                      GlobalCacheLoadStats.Miss.load(std::memory_order_relaxed),
+                      GlobalCacheLoadStats.OpenError.load(std::memory_order_relaxed),
+                      GlobalCacheLoadStats.InvalidFile.load(std::memory_order_relaxed),
+                      GlobalCacheLoadStats.LoadFailed.load(std::memory_order_relaxed));
+  }
+}
+} // namespace
+
 // SMC interactions
 bool SyscallHandler::HandleSegfault(FEXCore::Core::InternalThreadState* Thread, int Signal, void* info, void* ucontext) {
   const auto FaultAddress = (uintptr_t)((siginfo_t*)info)->si_addr;
@@ -218,30 +280,39 @@ static fextl::vector<Elf64_Phdr> ReadELFHeaders(int FD, std::span<std::byte> Hea
   return std::move(Parser.phdrs);
 }
 
-static void LoadCodeCache(FEXCore::Core::InternalThreadState& Thread, FEXCore::ExecutableFileSectionInfo& Section, uint64_t CodeCacheConfigId) {
+static bool LoadCodeCache(FEXCore::Core::InternalThreadState& Thread, FEXCore::ExecutableFileSectionInfo& Section, uint64_t CodeCacheConfigId) {
   auto CacheFilename = fextl::fmt::format("{}cache/{}-{:016x}", FEX::Config::GetCacheDirectory(),
                                           FEXCore::CodeMap::GetBaseFilename(Section.FileInfo, false), CodeCacheConfigId);
   int CacheFD = open(CacheFilename.c_str(), O_RDONLY);
   if (CacheFD == -1) {
-    LogMan::Msg::IFmt("Cache file does not exist: {}", CacheFilename);
-    return;
+    if (errno == ENOENT) {
+      RecordCacheLoadResult(CacheLoadResult::Miss, CacheFilename);
+    } else {
+      LogMan::Msg::DFmt("Could not open code cache {}: {}", CacheFilename, strerror(errno));
+      RecordCacheLoadResult(CacheLoadResult::OpenError, CacheFilename);
+    }
+    return false;
   }
 
   struct stat buf;
   if (fstat(CacheFD, &buf) != 0) {
     LogMan::Msg::EFmt("Invalid cache file: {}", CacheFilename);
     close(CacheFD);
-    return;
+    RecordCacheLoadResult(CacheLoadResult::InvalidFile, CacheFilename);
+    return false;
   }
 
   auto CacheFileSize = buf.st_size;
   auto MappedCache = (std::byte*)FEXCore::Allocator::mmap(nullptr, CacheFileSize, PROT_READ, MAP_PRIVATE, CacheFD, 0);
   LOGMAN_THROW_A_FMT(MappedCache, "Failed to map code cache into memory");
-  if (!Thread.CTX->GetCodeCache().LoadData(&Thread, MappedCache, Section)) {
+  const bool Loaded = Thread.CTX->GetCodeCache().LoadData(&Thread, MappedCache, Section);
+  if (!Loaded) {
     // TODO: Delete this cache file
   }
   FEXCore::Allocator::munmap(MappedCache, CacheFileSize);
   close(CacheFD);
+  RecordCacheLoadResult(Loaded ? CacheLoadResult::Loaded : CacheLoadResult::LoadFailed, CacheFilename);
+  return Loaded;
 }
 
 void* SyscallHandler::GuestMmap(bool Is64Bit, FEXCore::Core::InternalThreadState* Thread, void* addr, size_t length, int prot, int flags,
@@ -285,7 +356,7 @@ void* SyscallHandler::GuestMmap(bool Is64Bit, FEXCore::Core::InternalThreadState
   }
 
   if (EnableCodeCaching && CachedSection) {
-    LoadCodeCache(*Thread, *CachedSection, CodeCacheConfigId);
+    [[maybe_unused]] const bool Loaded = LoadCodeCache(*Thread, *CachedSection, CodeCacheConfigId);
   }
 
   return reinterpret_cast<void*>(Result);
