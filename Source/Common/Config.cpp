@@ -22,6 +22,7 @@
 #include <optional>
 #include <utility>
 #include <tiny-json.h>
+#include <xxhash.h>
 
 #include <range/v3/view/split.hpp>
 #include <range/v3/view/transform.hpp>
@@ -71,6 +72,61 @@ static constexpr std::pair<std::string_view, FEXCore::Config::ConfigOption> Conf
 #define OPT_BASE(type, group, enum, json, default) {#json, FEXCore::Config::ConfigOption::CONFIG_##enum},
 #include <FEXCore/Config/ConfigValues.inl>
 };
+
+template<typename T>
+static void HashRawValue(XXH3_state_t* State, const T& Value) {
+  XXH3_64bits_update(State, &Value, sizeof(Value));
+}
+
+static void HashStringValue(XXH3_state_t* State, std::string_view Value) {
+  const uint64_t Size = Value.size();
+  HashRawValue(State, Size);
+  if (!Value.empty()) {
+    XXH3_64bits_update(State, Value.data(), Value.size());
+  }
+}
+
+template<FEXCore::Config::ConfigOption Option>
+static void HashConfigOption(XXH3_state_t* State) {
+  HashRawValue(State, Option);
+
+  using OptionType = typename FEXCore::Config::detail::ConfigOptionInfo<Option>::Type;
+  if constexpr (std::is_same_v<OptionType, fextl::string>) {
+    if (const auto Value = FEXCore::Config::Get(Option)) {
+      HashStringValue(State, **Value);
+    }
+  } else if constexpr (std::is_same_v<OptionType, FEXCore::Config::StringArrayType>) {
+    if (const auto Values = FEXCore::Config::All(Option)) {
+      const auto Count = static_cast<uint64_t>((*Values)->size());
+      HashRawValue(State, Count);
+      for (const auto& Value : **Values) {
+        HashStringValue(State, Value);
+      }
+    }
+  } else {
+    if (const auto Value = FEXCore::Config::GetConv<OptionType>(Option)) {
+      HashRawValue(State, *Value);
+    }
+  }
+}
+
+uint64_t GetCodeCacheConfigId() {
+  XXH3_state_t* State = XXH3_createState();
+  LOGMAN_THROW_A_FMT(State != nullptr, "Failed to allocate hasher state");
+
+  constexpr std::string_view CacheConfigVersionTag = "FEX-CodeCacheConfig-v1";
+  XXH3_64bits_reset(State);
+  HashStringValue(State, CacheConfigVersionTag);
+
+#define OPT_BASE(type, group, enum, json, default) HashConfigOption<FEXCore::Config::ConfigOption::CONFIG_##enum>(State);
+#define OPT_STR(group, enum, json, default) HashConfigOption<FEXCore::Config::ConfigOption::CONFIG_##enum>(State);
+#define OPT_STRARRAY(group, enum, json, default) HashConfigOption<FEXCore::Config::ConfigOption::CONFIG_##enum>(State);
+#include <FEXCore/Config/ConfigValues.inl>
+
+  const auto Digest = XXH3_64bits_digest(State);
+  XXH3_freeState(State);
+  return Digest;
+}
 
 static char* SaveLayerToJSON(char* JsonBuffer, const FEXCore::Config::Layer* Layer) {
   JsonBuffer = json_objOpen(JsonBuffer, "Config");

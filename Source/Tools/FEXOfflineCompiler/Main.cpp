@@ -114,8 +114,8 @@ static FEXCore::Core::InternalThreadState* SetupCompileThread(FEXCore::Context::
 
 // Returns filename of generated cache on success
 static std::optional<std::string>
-GenerateSingleCache(const FEXCore::ExecutableFileInfo& Binary, fextl::set<uintptr_t> BlockList, std::string_view OutDir) {
-  uint64_t CodeCacheConfigId = 0; // TODO: Make unique to active configuration
+GenerateSingleCache(const FEXCore::ExecutableFileInfo& Binary, fextl::set<uintptr_t> BlockList, std::string_view OutDir,
+                    uint64_t CodeCacheConfigId) {
 
   ELFCodeLoader Loader(Binary.Filename.c_str(), -1, "", fextl::vector<fextl::string> {Binary.Filename.c_str()},
                        fextl::vector<fextl::string> {}, nullptr, nullptr, true /* skip interpreter */);
@@ -197,6 +197,7 @@ static int GenerateCache(int argc, const char** argv) {
   optparse::OptionParser Parser {};
   Parser.add_option("--outdir").set_default(FEX::Config::GetCacheDirectory() + "cache").help("Output directory for generated cache files");
   Parser.add_option("--fileid").help("Select binary to generate cache for");
+  Parser.add_option("--config-id").help("Override cache configuration id (hex or decimal)");
 
   optparse::Values Options = Parser.parse_args(argc, argv);
   if (Parser.args().size() != 1) {
@@ -260,8 +261,16 @@ static int GenerateCache(int argc, const char** argv) {
   char* envp[] = {nullptr};
   FEX::Config::LoadConfig("", envp, PortableInfo);
 
+  uint64_t CodeCacheConfigId = FEX::Config::GetCodeCacheConfigId();
+  {
+    const auto ConfigIdOverride = (fextl::string)Options.get("config-id");
+    if (!ConfigIdOverride.empty()) {
+      CodeCacheConfigId = strtoull(ConfigIdOverride.c_str(), nullptr, 0);
+    }
+  }
+
   auto NumBlocks = Data.at(ProgramName).size();
-  auto GeneratedCache = GenerateSingleCache(ProgramName, Data.at(ProgramName), OutDir);
+  auto GeneratedCache = GenerateSingleCache(ProgramName, Data.at(ProgramName), OutDir, CodeCacheConfigId);
   if (GeneratedCache) {
     fmt::print("Successfully populated cache {} ({} blocks) via {}\n\n", GeneratedCache.value(), NumBlocks,
                std::filesystem::path {CodeMapPath}.filename().string());

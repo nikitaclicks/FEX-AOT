@@ -324,7 +324,7 @@ public:
 
   VMATracking::VMATracking VMATracking;
 
-  const uint64_t CodeCacheConfigId = 0; // TODO: Make unique to active configuration
+  const uint64_t CodeCacheConfigId;
 
   uint64_t read_ldt(FEXCore::Core::CpuStateFrame* Frame, void* ptr, unsigned long bytecount);
   uint64_t write_ldt(FEXCore::Core::CpuStateFrame* Frame, void* ptr, unsigned long bytecount, bool legacy);

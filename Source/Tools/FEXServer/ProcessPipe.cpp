@@ -469,8 +469,9 @@ int32_t EmbedSubprocess(const char* path, char* const* args) {
 /**
  * Spawn a FEXOfflineCompiler instance to generate a code cache from the given code map
  */
-static int RunOfflineCompiler(const char* CodeMap) {
-  const char* ExecveArgs[] = {"FEXOfflineCompiler", "generate", CodeMap, nullptr};
+static int RunOfflineCompiler(const char* CodeMap, uint64_t CodeCacheConfigId) {
+  const auto ConfigIdArg = fextl::fmt::format("--config-id={:#x}", CodeCacheConfigId);
+  const char* ExecveArgs[] = {"FEXOfflineCompiler", "generate", ConfigIdArg.c_str(), CodeMap, nullptr};
   return EmbedSubprocess("FEXOfflineCompiler", const_cast<char* const*>(&ExecveArgs[0]));
 };
 
@@ -596,10 +597,11 @@ void HandleSocketData(fasio::tcp_socket& Socket) {
 
       FEXCore::ExecutableFileInfo MainFileId = {nullptr, filename_hash, fextl::string(Tmp, TmpLen)};
       fmt::print("Requested {}cache generation for {}\n", HasMultiblock ? "" : "nomb-", MainFileId.Filename);
+      const auto CodeCacheConfigId = FEX::Config::GetCodeCacheConfigId();
 
-      auto GetCacheFilename = [](const FEXCore::ExecutableFileInfo& FileId) {
+      auto GetCacheFilename = [CodeCacheConfigId](const FEXCore::ExecutableFileInfo& FileId) {
         return fmt::format("{}cache/{}-{:016x}", FEX::Config::GetCacheDirectory(), FEXCore::CodeMap::GetBaseFilename(FileId, false),
-                           0 /* TODO: Use unique cache id */);
+                           CodeCacheConfigId);
       };
 
       // Update code maps; any update necessitates an update of the corresponding cache
@@ -631,7 +633,7 @@ void HandleSocketData(fasio::tcp_socket& Socket) {
 
         const auto BinaryName = (std::string)FEXCore::CodeMap::GetBaseFilename(File, !HasMultiblock);
         fmt::println("Generating cache for {}", BinaryName);
-        int Status = RunOfflineCompiler(fmt::format("{}/{}", ReadyCodeMapDirectory, BinaryName).c_str());
+        int Status = RunOfflineCompiler(fmt::format("{}/{}", ReadyCodeMapDirectory, BinaryName).c_str(), CodeCacheConfigId);
         if (Status != 0) {
           fmt::println("ERROR: Cache generation failed with status {}", Status);
         }

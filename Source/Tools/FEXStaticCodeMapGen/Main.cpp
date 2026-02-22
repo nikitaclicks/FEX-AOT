@@ -379,6 +379,17 @@ std::filesystem::path ApplyRootFS(const std::filesystem::path& Path, const Resol
   return Config.RootFS.value() / Relative;
 }
 
+void AppendWithRootFSPreference(std::vector<std::filesystem::path>* Paths, const std::filesystem::path& Path, const ResolveConfig& Config) {
+  if (Path.empty()) {
+    return;
+  }
+
+  if (Path.is_absolute() && Config.RootFS.has_value()) {
+    Paths->emplace_back(ApplyRootFS(Path, Config));
+  }
+  Paths->emplace_back(Path);
+}
+
 std::vector<std::filesystem::path> BuildDefaultSearchPaths(BinaryClass Class, const ResolveConfig& Config) {
   std::vector<std::filesystem::path> Paths;
   if (Class == BinaryClass::ELF64) {
@@ -396,10 +407,7 @@ std::vector<std::filesystem::path> BuildDefaultSearchPaths(BinaryClass Class, co
   std::vector<std::filesystem::path> Final;
   Final.reserve(Paths.size() * 2);
   for (auto& Path : Paths) {
-    Final.emplace_back(Path);
-    if (Config.RootFS.has_value()) {
-      Final.emplace_back(ApplyRootFS(Path, Config));
-    }
+    AppendWithRootFSPreference(&Final, Path, Config);
   }
   return Final;
 }
@@ -418,10 +426,7 @@ std::vector<std::filesystem::path> ExpandSearchEntries(const fextl::vector<fextl
       Path = Origin / Path;
     }
 
-    Paths.emplace_back(Path);
-    if (Path.is_absolute() && Config.RootFS.has_value()) {
-      Paths.emplace_back(ApplyRootFS(Path, Config));
-    }
+    AppendWithRootFSPreference(&Paths, Path, Config);
   }
   return Paths;
 }
@@ -476,12 +481,9 @@ std::optional<std::filesystem::path> ResolveDependency(const BinaryRecord& Paren
   std::filesystem::path NeededPath {Needed};
   std::vector<std::filesystem::path> Candidates;
   if (NeededPath.is_absolute()) {
-    Candidates.emplace_back(NeededPath);
-    if (Config.RootFS.has_value()) {
-      Candidates.emplace_back(ApplyRootFS(NeededPath, Config));
-    }
+    AppendWithRootFSPreference(&Candidates, NeededPath, Config);
   } else if (Needed.find('/') != std::string_view::npos) {
-    Candidates.emplace_back(Parent.Path.parent_path() / NeededPath);
+    AppendWithRootFSPreference(&Candidates, Parent.Path.parent_path() / NeededPath, Config);
   } else {
     const auto SearchPaths = BuildResolverSearchOrder(Parent, Config);
     for (const auto& SearchPath : SearchPaths) {

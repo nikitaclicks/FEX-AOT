@@ -9,6 +9,8 @@ $end_info$
 
 #include "CodeLoader.h"
 
+#include "Common/Config.h"
+
 #include "FEXHeaderUtils/StringArgumentParser.h"
 #include "Linux/Utils/ELFContainer.h"
 #include "Linux/Utils/ELFParser.h"
@@ -785,6 +787,7 @@ SyscallHandler::SyscallHandler(FEXCore::Context::Context* _CTX, FEX::HLE::Signal
   : TM {_CTX, _SignalDelegation}
   , SeccompEmulator {this, _SignalDelegation}
   , FM {_CTX}
+  , CodeCacheConfigId {FEX::Config::GetCodeCacheConfigId()}
   , CTX {_CTX}
   , SignalDelegation {_SignalDelegation}
   , ThunkHandler {ThunkHandler} {

@@ -63,6 +63,7 @@ fextl::string GetDataDirectory(const PortableInformation& PortableInfo);
 fextl::string GetConfigDirectory(bool Global, const PortableInformation& PortableInfo);
 fextl::string GetConfigFileLocation(bool Global, const PortableInformation& PortableInfo);
 fextl::string GetCacheDirectory();
+uint64_t GetCodeCacheConfigId();
 
 void InitializeConfigs(const PortableInformation& PortableInfo);
 
