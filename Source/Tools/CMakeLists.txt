@@ -22,6 +22,7 @@ if (NOT MINGW)
   add_subdirectory(FEXServer/)
   add_subdirectory(FEXBash/)
   add_subdirectory(FEXOfflineCompiler/)
+  add_subdirectory(FEXStaticCodeMapGen/)
   add_subdirectory(CodeSizeValidation/)
   add_subdirectory(LinuxEmulation/)
 
