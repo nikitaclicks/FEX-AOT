@@ -67,6 +67,7 @@ CC_BIN="${CC:-cc}"
 "${CC_BIN}" -O2 -std=c11 "${CANARY_SRC}" -o "${CANARY_BIN}"
 
 CACHE_DIR="$(mktemp -d -t fex-aot-guardrail-XXXXXX)"
+CACHE_DIR="${CACHE_DIR%/}/"
 cleanup() {
   if [[ ${KEEP_CACHE} -eq 0 ]]; then
     rm -rf "${CACHE_DIR}"

@@ -20,7 +20,9 @@
 
 #include <xxhash.h>
 
+#include <array>
 #include <fstream>
+#include <optional>
 
 namespace FEXCore {
 
@@ -217,6 +219,43 @@ void CodeMapWriter::AppendData(std::span<const std::byte> Data) {
 
 namespace FEXCore::Context {
 
+static std::optional<uint64_t> ComputeContentHashFromFD(int FD) {
+  if (FD == -1) {
+    return std::nullopt;
+  }
+
+  struct stat Stat {};
+  if (fstat(FD, &Stat) != 0 || !S_ISREG(Stat.st_mode) || Stat.st_size <= 0) {
+    return std::nullopt;
+  }
+
+  XXH3_state_t* State = XXH3_createState();
+  if (State == nullptr) {
+    return std::nullopt;
+  }
+
+  XXH3_64bits_reset(State);
+
+  std::array<char, 1 << 20> Buffer;
+  off_t Offset = 0;
+  while (Offset < Stat.st_size) {
+    const auto Remaining = static_cast<size_t>(Stat.st_size - Offset);
+    const auto ToRead = std::min(Remaining, Buffer.size());
+    const auto Read = pread(FD, Buffer.data(), ToRead, Offset);
+    if (Read <= 0) {
+      XXH3_freeState(State);
+      return std::nullopt;
+    }
+
+    XXH3_64bits_update(State, Buffer.data(), Read);
+    Offset += Read;
+  }
+
+  const auto Hash = XXH3_64bits_digest(State);
+  XXH3_freeState(State);
+  return Hash;
+}
+
 CodeCache::CodeCache(ContextImpl& CTX_)
   : CTX(CTX_) {}
 CodeCache::~CodeCache() = default;
@@ -226,8 +265,11 @@ uint64_t CodeCache::ComputeCodeMapId(std::string_view Filename, int FD) {
     return 0xffff'ffff'ffff'ffff;
   }
 
-  // For now, we just use the file path as an identifier.
-  // TODO: Ensure the hash is unique enough to distinguish executables while remaining independent of the installation location
+  if (auto ContentHash = ComputeContentHashFromFD(FD); ContentHash.has_value()) {
+    return ContentHash.value();
+  }
+
+  // Fallback for call sites without a valid file descriptor.
   return XXH3_64bits(Filename.data(), Filename.size());
 }
 
