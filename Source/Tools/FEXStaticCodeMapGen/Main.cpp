@@ -15,6 +15,7 @@
 #include <xxhash.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -80,6 +81,43 @@ uint64_t ComputePathFileId(std::string_view Filename) {
     return 0xffff'ffff'ffff'ffffULL;
   }
   return XXH3_64bits(Filename.data(), Filename.size());
+}
+
+std::optional<uint64_t> ComputeContentHashFromFD(int FD) {
+  if (FD == -1) {
+    return std::nullopt;
+  }
+
+  struct stat Stat {};
+  if (fstat(FD, &Stat) != 0 || !S_ISREG(Stat.st_mode) || Stat.st_size <= 0) {
+    return std::nullopt;
+  }
+
+  XXH3_state_t* State = XXH3_createState();
+  if (State == nullptr) {
+    return std::nullopt;
+  }
+
+  XXH3_64bits_reset(State);
+
+  std::array<char, 1 << 20> Buffer;
+  off_t Offset = 0;
+  while (Offset < Stat.st_size) {
+    const auto Remaining = static_cast<size_t>(Stat.st_size - Offset);
+    const auto ToRead = std::min(Remaining, Buffer.size());
+    const auto Read = pread(FD, Buffer.data(), ToRead, Offset);
+    if (Read <= 0) {
+      XXH3_freeState(State);
+      return std::nullopt;
+    }
+
+    XXH3_64bits_update(State, Buffer.data(), Read);
+    Offset += Read;
+  }
+
+  const auto Hash = XXH3_64bits_digest(State);
+  XXH3_freeState(State);
+  return Hash;
 }
 
 std::vector<fextl::string> SplitColonList(const char* Value) {
@@ -325,7 +363,7 @@ bool LoadBinaryRecord(const std::filesystem::path& BinaryPath, BinaryRecord* Out
 
   OutRecord->Path = std::move(CanonicalPath);
   OutRecord->Class = GetBinaryClass(Parser);
-  OutRecord->FileId = ComputePathFileId(CanonicalFEX);
+  OutRecord->FileId = ComputeContentHashFromFD(Parser.fd).value_or(ComputePathFileId(CanonicalFEX));
   OutRecord->ImageBase = ImageBase;
   OutRecord->SeedAddresses = std::move(SeedAddresses);
   OutRecord->Dynamic = ParseDynamicMetadata(Parser);
