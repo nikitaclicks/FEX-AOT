@@ -14,6 +14,8 @@ This folder contains helper scripts to build/run FEX locally on x86_64 for devel
   - Builds a deterministic canary and checks JIT vs cache-enabled parity.
 - `build_static_seed_cache_x86_dev.sh`
   - Generates static seed codemaps for x86 ELFs in a folder and compiles caches.
+- `run_local_aot_regressions_x86_dev.sh`
+  - Local non-CI regression runner that chains guardrail parity + static seeding + runtime smoke assertions.
 - `undo_x86_dev.sh`
   - Removes local artifacts and optionally purges system packages/cache.
 
@@ -41,6 +43,19 @@ Optional dependency-resolution flags:
 - `--search-path /path/one --search-path /path/two`
 
 The generated cache set can be tested with `FEX_APP_CACHE_LOCATION=<cache-dir>`.
+
+For local regression checks (no CI):
+
+1. `./Scripts/dev/run_local_aot_regressions_x86_dev.sh`
+
+Useful options:
+
+- `--skip-build`
+- `--guardrail-retries 3`
+- `--keep-artifacts`
+- `--input-dir /path/to/x86-binaries`
+- `--rootfs /path/to/rootfs`
+- `--search-path /path/one --search-path /path/two`
 
 ## Runtime defaults used by `run_x86_dev.sh`
 
